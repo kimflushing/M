@@ -1,0 +1,1132 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D 메가 베이커리 스튜디오 200</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Sans+KR:wght@400;600;800;900&display=swap');
+        
+        body {
+            touch-action: manipulation;
+            -webkit-user-select: none;
+            user-select: none;
+            font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow: hidden;
+            background-color: #121212;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            touch-action: none;
+        }
+        .font-gowun {
+            font-family: 'Gowun Dodum', sans-serif;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.05);
+            border-radius: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(217, 119, 6, 0.5);
+            border-radius: 8px;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+        }
+        .glass-panel-dark {
+            background: rgba(30, 25, 20, 0.88);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(217, 119, 6, 0.4);
+            color: #fff;
+        }
+        @keyframes floatText {
+            0% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -60px) scale(1.2); }
+        }
+        .floating-score {
+            position: absolute;
+            animation: floatText 1.2s ease-out forwards;
+            pointer-events: none;
+            font-weight: 900;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.6);
+            z-index: 50;
+        }
+    </style>
+</head>
+<body class="relative w-screen h-screen overflow-hidden select-none">
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container" class="w-full h-full absolute inset-0 z-0"></div>
+
+    <!-- HUD Top Bar -->
+    <div class="absolute top-3 left-3 right-3 z-10 flex justify-between items-center pointer-events-none">
+        <!-- Coin, Level & Sound Toggle -->
+        <div class="flex items-center space-x-2 sm:space-x-3">
+            <div class="glass-panel rounded-2xl px-3.5 py-2 shadow-xl flex items-center space-x-2.5 pointer-events-auto">
+                <div class="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center text-white shadow-md text-base">
+                    <i class="fa-solid fa-coins"></i>
+                </div>
+                <div>
+                    <div class="text-[10px] text-amber-900 font-bold uppercase tracking-wider">골드</div>
+                    <div id="gold-display" class="text-base sm:text-lg font-black text-amber-800 leading-none">500 G</div>
+                </div>
+            </div>
+
+            <div class="glass-panel rounded-2xl px-3.5 py-2 shadow-xl flex items-center space-x-2.5 pointer-events-auto">
+                <div class="w-9 h-9 rounded-xl bg-amber-700 flex items-center justify-center text-white shadow-md text-base">
+                    <i class="fa-solid fa-crown"></i>
+                </div>
+                <div>
+                    <div class="text-[10px] text-amber-900 font-bold uppercase tracking-wider">베이커리 등급</div>
+                    <div id="level-display" class="text-base sm:text-lg font-black text-amber-900 leading-none">Lv.1 초보 제빵사</div>
+                </div>
+            </div>
+
+            <button onclick="toggleAudio()" id="audio-btn" class="glass-panel rounded-2xl w-10 h-10 flex items-center justify-center text-amber-800 shadow-xl pointer-events-auto hover:bg-amber-100 transition">
+                <i class="fa-solid fa-volume-high" id="audio-icon"></i>
+            </button>
+        </div>
+
+        <!-- Catalog Filter Info & Total Count -->
+        <div class="glass-panel rounded-2xl px-3.5 py-2 shadow-md hidden sm:flex items-center space-x-2 pointer-events-auto text-xs font-bold text-amber-900">
+            <i class="fa-solid fa-store text-amber-600"></i>
+            <span>베이커리 레시피: <span id="total-bread-count" class="text-amber-600 font-extrabold">216</span>종 등록</span>
+        </div>
+    </div>
+
+    <!-- Customer Order Card (Upper Right) -->
+    <div class="absolute top-16 sm:top-16 right-3 z-10 w-80 max-w-[calc(100vw-24px)] pointer-events-auto">
+        <div id="order-card" class="glass-panel rounded-2xl p-3.5 shadow-2xl border-2 border-amber-400 transition-all duration-300">
+            <div class="flex items-center space-x-3 border-b border-amber-200/80 pb-2 mb-2">
+                <div id="customer-avatar" class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-400 to-yellow-200 text-amber-950 flex items-center justify-center font-bold text-3xl shadow-inner">
+                    👵
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center justify-between">
+                        <div id="customer-name" class="text-xs font-extrabold text-amber-950 truncate">할머니 손님</div>
+                        <span id="patience-badge" class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">인내심 100%</span>
+                    </div>
+                    <div id="customer-dialog" class="text-[11px] text-amber-800 italic truncate">"맛있는 빵을 만들어주세요!"</div>
+                    <!-- Patience Progress Bar -->
+                    <div class="w-full bg-amber-200 h-1.5 rounded-full overflow-hidden mt-1">
+                        <div id="patience-bar" class="bg-emerald-500 h-full w-full transition-all duration-300"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-1 text-xs text-amber-950 bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/60">
+                <div class="flex justify-between items-center">
+                    <span class="font-semibold text-amber-800"><i class="fa-solid fa-bread-slice mr-1 text-amber-600"></i>요청 빵:</span>
+                    <span id="target-bread-name" class="font-extrabold text-amber-900 truncate max-w-[150px]">골드 크루아상</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="font-semibold text-amber-800"><i class="fa-solid fa-cookie-bite mr-1 text-amber-600"></i>필수 토핑:</span>
+                    <span id="target-topping-name" class="font-bold text-amber-700 truncate max-w-[150px]">초코칩</span>
+                </div>
+                <div class="flex justify-between items-center pt-1 border-t border-amber-200/40">
+                    <span class="font-semibold text-amber-800">성공 보상:</span>
+                    <span id="target-reward" class="font-black text-emerald-600 text-sm">250 G</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-1.5 mt-2.5">
+                <button onclick="deliverOrder()" class="py-2 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 active:scale-95 text-white font-black text-xs rounded-xl shadow-lg transition flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-bell-concierge"></i>
+                    <span>손님에게 제출</span>
+                </button>
+                <button onclick="skipCustomer()" class="py-2 bg-amber-200/80 hover:bg-amber-300 active:scale-95 text-amber-900 font-bold text-xs rounded-xl transition flex items-center justify-center space-x-1">
+                    <i class="fa-solid fa-forward"></i>
+                    <span>손님 보내기</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Toast Notification -->
+    <div id="toast" class="absolute top-20 left-1/2 transform -translate-x-1/2 z-40 pointer-events-none opacity-0 transition-all duration-300">
+        <div class="bg-gray-950/90 text-white px-5 py-2.5 rounded-full text-xs sm:text-sm font-bold shadow-2xl border border-amber-500/40 flex items-center space-x-2">
+            <i id="toast-icon" class="fa-solid fa-circle-info text-amber-400"></i>
+            <span id="toast-msg">알림 메시지</span>
+        </div>
+    </div>
+
+    <!-- Control Bottom Sheet UI -->
+    <div class="absolute bottom-0 left-0 right-0 z-20 p-2 sm:p-4 pointer-events-none">
+        <div class="max-w-4xl mx-auto glass-panel rounded-3xl p-3 shadow-2xl pointer-events-auto space-y-2.5">
+            
+            <!-- Navigation Tabs (5 Modes) -->
+            <div class="grid grid-cols-5 gap-1 text-[11px] sm:text-xs font-black">
+                <button onclick="switchTab('bread')" id="tab-bread" class="py-2 px-1 rounded-xl bg-amber-500 text-white shadow-md transition flex flex-col sm:flex-row items-center justify-center space-x-0 sm:space-x-1">
+                    <i class="fa-solid fa-bread-slice"></i>
+                    <span>레시피 선택</span>
+                </button>
+                <button onclick="switchTab('diy')" id="tab-diy" class="py-2 px-1 rounded-xl bg-amber-100/80 text-amber-900 hover:bg-amber-200 transition flex flex-col sm:flex-row items-center justify-center space-x-0 sm:space-x-1">
+                    <i class="fa-solid fa-hand-holding-hand"></i>
+                    <span>DIY 수제 반죽</span>
+                </button>
+                <button onclick="switchTab('icing')" id="tab-icing" class="py-2 px-1 rounded-xl bg-amber-100/80 text-amber-900 hover:bg-amber-200 transition flex flex-col sm:flex-row items-center justify-center space-x-0 sm:space-x-1">
+                    <i class="fa-solid fa-fill-drip"></i>
+                    <span>아이싱 & 디테일</span>
+                </button>
+                <button onclick="switchTab('topping')" id="tab-topping" class="py-2 px-1 rounded-xl bg-amber-100/80 text-amber-900 hover:bg-amber-200 transition flex flex-col sm:flex-row items-center justify-center space-x-0 sm:space-x-1">
+                    <i class="fa-solid fa-cookie-bite"></i>
+                    <span>3D 토핑 배치</span>
+                </button>
+                <button onclick="switchTab('oven')" id="tab-oven" class="py-2 px-1 rounded-xl bg-amber-100/80 text-amber-900 hover:bg-amber-200 transition flex flex-col sm:flex-row items-center justify-center space-x-0 sm:space-x-1">
+                    <i class="fa-solid fa-fire-burner"></i>
+                    <span>오븐 베이킹</span>
+                </button>
+            </div>
+
+            <!-- TAB 1: 200+ Bread Search & Carousel -->
+            <div id="panel-bread" class="space-y-2">
+                <div class="flex items-center space-x-2">
+                    <div class="relative flex-1">
+                        <input type="text" id="bread-search-input" oninput="filterBreadList()" placeholder="200여종 메뉴 검색..." class="w-full bg-amber-50/80 border border-amber-200 text-xs text-amber-950 font-bold rounded-xl pl-8 pr-3 py-1.5 outline-none focus:border-amber-500">
+                        <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-xs text-amber-500"></i>
+                    </div>
+                    <select id="bread-cat-select" onchange="filterBreadList()" class="bg-amber-50/80 border border-amber-200 text-xs font-bold text-amber-900 rounded-xl px-2 py-1.5 outline-none">
+                        <option value="ALL">전체 카테고리</option>
+                        <option value="식빵">식빵류</option>
+                        <option value="바게트">바게트류</option>
+                        <option value="크루아상">크루아상류</option>
+                        <option value="도넛">도넛류</option>
+                        <option value="베이글">베이글류</option>
+                        <option value="케이크">케이크류</option>
+                        <option value="머핀">머핀류</option>
+                        <option value="프레첼">프레첼류</option>
+                        <option value="소금빵">소금빵류</option>
+                        <option value="마카롱">마카롱류</option>
+                        <option value="파이">파이류</option>
+                        <option value="번">번/단과자류</option>
+                    </select>
+                </div>
+                <div id="bread-list" class="flex space-x-2 overflow-x-auto pb-1 pt-1 custom-scrollbar min-h-[82px] items-center">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- TAB 2: DIY Dough Custom Modeler -->
+            <div id="panel-diy" class="hidden space-y-2">
+                <div class="bg-amber-50/90 p-2.5 rounded-2xl border border-amber-200 flex flex-col space-y-2">
+                    <div class="flex justify-between items-center text-xs font-bold text-amber-900">
+                        <span><i class="fa-solid fa-sliders mr-1 text-amber-600"></i>나만의 DIY 반죽 조형 (Shape Morphing)</span>
+                        <button onclick="resetDoughShape()" class="text-xs text-amber-700 hover:text-amber-900 font-extrabold underline">형태 초기화</button>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] font-bold text-amber-900">
+                        <div>
+                            <label class="block mb-0.5">X축 크기/너비</label>
+                            <input type="range" id="scale-x" min="0.4" max="2.2" step="0.05" value="1.0" oninput="updateDoughTransform()" class="w-full accent-amber-600">
+                        </div>
+                        <div>
+                            <label class="block mb-0.5">Y축 두께/높이</label>
+                            <input type="range" id="scale-y" min="0.3" max="2.0" step="0.05" value="1.0" oninput="updateDoughTransform()" class="w-full accent-amber-600">
+                        </div>
+                        <div>
+                            <label class="block mb-0.5">Z축 길쭉함</label>
+                            <input type="range" id="scale-z" min="0.4" max="2.2" step="0.05" value="1.0" oninput="updateDoughTransform()" class="w-full accent-amber-600">
+                        </div>
+                        <div>
+                            <label class="block mb-0.5">반죽 비틀기 (Twist)</label>
+                            <input type="range" id="twist-val" min="-2.0" max="2.0" step="0.1" value="0.0" oninput="updateDoughTransform()" class="w-full accent-amber-600">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: Icing Cream Piping & Glaze -->
+            <div id="panel-icing" class="hidden space-y-2">
+                <div class="flex justify-between items-center text-xs font-bold text-amber-900 px-1">
+                    <span>3D 상에서 터치/클릭하여 짤주머니로 생크림을 올리세요!</span>
+                    <button onclick="clearPipedCream()" class="text-red-500 hover:text-red-700 text-[11px] underline">크림 전체 지우기</button>
+                </div>
+
+                <!-- Glaze Quick Selector -->
+                <div class="flex items-center space-x-2 overflow-x-auto pb-1 text-xs">
+                    <span class="font-extrabold text-amber-900 text-[11px] flex-shrink-0">글레이즈 코팅:</span>
+                    <button onclick="setGlazeColor(null)" class="px-2.5 py-1 bg-gray-200 text-gray-800 rounded-lg text-[10px] font-bold">기본</button>
+                    <button onclick="setGlazeColor(0x3D2314)" class="px-2.5 py-1 bg-amber-950 text-white rounded-lg text-[10px] font-bold">초코</button>
+                    <button onclick="setGlazeColor(0xFF6B81)" class="px-2.5 py-1 bg-pink-400 text-white rounded-lg text-[10px] font-bold">딸기</button>
+                    <button onclick="setGlazeColor(0x8A9A5B)" class="px-2.5 py-1 bg-emerald-700 text-white rounded-lg text-[10px] font-bold">말차</button>
+                    <button onclick="setGlazeColor(0xFFD700)" class="px-2.5 py-1 bg-yellow-400 text-amber-950 rounded-lg text-[10px] font-bold">치즈</button>
+                </div>
+
+                <!-- Cream Color Selection -->
+                <div class="flex items-center space-x-2 text-xs pt-1 border-t border-amber-200/60">
+                    <span class="font-extrabold text-amber-900 text-[11px] flex-shrink-0">짤주머니 크림:</span>
+                    <button onclick="setCreamColor(0xFFFFFF)" class="px-2.5 py-1 border border-gray-300 bg-white text-gray-800 rounded-lg text-[10px] font-bold">순백 생크림</button>
+                    <button onclick="setCreamColor(0x4A2E1B)" class="px-2.5 py-1 bg-amber-900 text-white rounded-lg text-[10px] font-bold">초코 크림</button>
+                    <button onclick="setCreamColor(0xFFB7B2)" class="px-2.5 py-1 bg-pink-300 text-pink-950 rounded-lg text-[10px] font-bold">딸기 크림</button>
+                    <button onclick="setCreamColor(0xF0E68C)" class="px-2.5 py-1 bg-yellow-200 text-amber-950 rounded-lg text-[10px] font-bold">슈크림</button>
+                </div>
+            </div>
+
+            <!-- TAB 4: Topping Placement -->
+            <div id="panel-topping" class="hidden space-y-2">
+                <div class="flex justify-between items-center text-xs font-bold text-amber-900 px-1">
+                    <span>원하는 토핑 아이콘을 클릭하여 빵 위에 뿌려주세요</span>
+                    <button onclick="clearToppings()" class="text-red-500 hover:text-red-700 text-[11px] underline">토핑 지우기</button>
+                </div>
+                <div id="topping-list" class="flex space-x-2 overflow-x-auto pb-1 custom-scrollbar items-center">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- TAB 5: Oven Bake System -->
+            <div id="panel-oven" class="hidden space-y-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-center">
+                    <div class="sm:col-span-2 bg-amber-50/90 p-3 rounded-2xl border border-amber-200 flex flex-col space-y-1.5">
+                        <div class="flex justify-between items-center text-xs font-bold">
+                            <span class="text-amber-950"><i class="fa-solid fa-temperature-high text-red-500 mr-1"></i>오븐 굽기 상태</span>
+                            <span id="bake-status-text" class="text-amber-700 font-extrabold">생반죽 (날것)</span>
+                        </div>
+                        <div class="w-full bg-amber-200/80 h-4 rounded-full overflow-hidden p-0.5 border border-amber-300">
+                            <div id="bake-progress-bar" class="h-full bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-950 w-0 transition-all duration-75 rounded-full"></div>
+                        </div>
+                        <div class="flex justify-between text-[10px] text-amber-800 font-bold px-1">
+                            <span>0% (생반죽)</span>
+                            <span class="text-emerald-700 font-extrabold">50% (노릇노릇 황금빛)</span>
+                            <span class="text-red-700">100% (탄빵)</span>
+                        </div>
+                    </div>
+
+                    <div class="flex sm:flex-col gap-2">
+                        <button id="btn-bake-toggle" onclick="toggleBaking()" class="flex-1 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-extrabold text-xs rounded-2xl shadow-lg transition active:scale-95 flex items-center justify-center space-x-1.5">
+                            <i class="fa-solid fa-fire text-yellow-300"></i>
+                            <span id="bake-btn-text">오븐 가열 시작</span>
+                        </button>
+                        <button onclick="resetDough()" class="py-2.5 px-3 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold rounded-2xl transition active:scale-95 text-xs flex items-center justify-center space-x-1">
+                            <i class="fa-solid fa-rotate-right"></i>
+                            <span>초기화</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- WEB AUDIO API SYNTHESIZER FOR SOUND EFFECTS ---
+        let audioCtx = null;
+        let soundEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!soundEnabled) return;
+            initAudio();
+            if (!audioCtx) return;
+
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'click') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(600, now);
+                    osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
+                    osc.start(now);
+                    osc.stop(now + 0.05);
+                } else if (type === 'topping') {
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(550, now + 0.08);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
+                    osc.start(now);
+                    osc.stop(now + 0.08);
+                } else if (type === 'success') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+                    osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now);
+                    osc.stop(now + 0.4);
+                } else if (type === 'fail') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(250, now);
+                    osc.frequency.linearRampToValueAtTime(120, now + 0.25);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                    osc.start(now);
+                    osc.stop(now + 0.25);
+                }
+            } catch (e) {
+                console.warn('Audio play failed', e);
+            }
+        }
+
+        function toggleAudio() {
+            soundEnabled = !soundEnabled;
+            const icon = document.getElementById('audio-icon');
+            if (soundEnabled) {
+                icon.className = 'fa-solid fa-volume-high';
+                showToast('🔊 효과음이 켜졌습니다.');
+            } else {
+                icon.className = 'fa-solid fa-volume-xmark';
+                showToast('🔇 효과음이 꺼졌습니다.');
+            }
+        }
+
+        // --- BREAD DATABASE GENERATOR (PROCEDURAL 216+ UNIQUE ITEMS) ---
+        const BREAD_CATEGORIES = [
+            { cat: '식빵', baseShape: 'box', aspect: [1.2, 1.2, 1.5], color: 0xF5E3C3, icon: '🍞' },
+            { cat: '바게트', baseShape: 'cylinder', aspect: [0.32, 0.32, 2.5], color: 0xE8C89A, icon: '🥖' },
+            { cat: '크루아상', baseShape: 'torus', aspect: [0.65, 0.25, 16, 28, Math.PI * 1.25], color: 0xF0D090, icon: '🥐' },
+            { cat: '도넛', baseShape: 'torus', aspect: [0.6, 0.28, 16, 32], color: 0xF5DCB0, icon: '🍩' },
+            { cat: '베이글', baseShape: 'torus', aspect: [0.62, 0.34, 16, 32], color: 0xE6C280, icon: '🥯' },
+            { cat: '케이크', baseShape: 'cylinder', aspect: [1.2, 0.8, 1.2], color: 0xFFF5E6, icon: '🎂' },
+            { cat: '머핀', baseShape: 'muffin', aspect: [0.6, 0.75, 0.6], color: 0xEAD0A8, icon: '🧁' },
+            { cat: '프레첼', baseShape: 'pretzel', aspect: [0.85, 0.85, 0.2], color: 0xD9A05B, icon: '🥨' },
+            { cat: '소금빵', baseShape: 'capsule', aspect: [0.42, 1.35, 0.42], color: 0xF7E1B5, icon: '🥐' },
+            { cat: '마카롱', baseShape: 'macaron', aspect: [0.65, 0.45, 0.65], color: 0xFFD1DC, icon: '🍬' },
+            { cat: '파이', baseShape: 'cylinder', aspect: [1.3, 0.42, 1.3], color: 0xE0B36C, icon: '🥧' },
+            { cat: '번', baseShape: 'sphere', aspect: [0.85, 0.65, 0.85], color: 0xE2B771, icon: '🥯' }
+        ];
+
+        const PREFIXES = [
+            { name: '플레인', color: null },
+            { name: '리치 버터', color: 0xFFE082 },
+            { name: '다크 초코', color: 0x4A2E1B },
+            { name: '화이트 초코', color: 0xFFF8E7 },
+            { name: '상큼 딸기', color: 0xFFB7B2 },
+            { name: '진한 말차', color: 0x7E9A60 },
+            { name: '체다 치즈', color: 0xFFB300 },
+            { name: '블루베리', color: 0x6C5CE7 },
+            { name: '고소한 아몬드', color: 0xD7CCC8 },
+            { name: '시나몬 슈가', color: 0xA1887F },
+            { name: '달콤 바닐라', color: 0xFFF9C4 },
+            { name: '달달 고구마', color: 0xCE93D8 },
+            { name: '고소 옥수수', color: 0xFFE082 },
+            { name: '카라멜 퐁당', color: 0xB17A43 },
+            { name: '로열 골드', color: 0xFFD700 },
+            { name: '에스프레소', color: 0x3E2723 },
+            { name: '흑임자', color: 0x424242 },
+            { name: '크림치즈', color: 0xFFFDE7 }
+        ];
+
+        const BREAD_DATABASE = [];
+        let breadIdCount = 1;
+
+        BREAD_CATEGORIES.forEach(catObj => {
+            PREFIXES.forEach(prefObj => {
+                const finalColor = prefObj.color !== null ? prefObj.color : catObj.color;
+                BREAD_DATABASE.push({
+                    id: breadIdCount++,
+                    name: `${prefObj.name} ${catObj.cat}`,
+                    category: catObj.cat,
+                    baseShape: catObj.baseShape,
+                    aspect: catObj.aspect,
+                    baseColor: finalColor,
+                    icon: catObj.icon
+                });
+            });
+        });
+
+        const TOPPINGS_DATABASE = [
+            { id: 'choco_chip', name: '초코칩', color: 0x3D2314, shape: 'dodeca', scale: 0.08, icon: '🍫' },
+            { id: 'sprinkles', name: '레인보우 스프링클', color: 0xFF4081, shape: 'box', scale: 0.06, icon: '🌈' },
+            { id: 'almond', name: '아몬드 슬라이스', color: 0xD2B48C, shape: 'box', scale: 0.1, icon: '🌰' },
+            { id: 'strawberry', name: '생딸기 토핑', color: 0xFF2B4A, shape: 'cone', scale: 0.12, icon: '🍓' },
+            { id: 'blueberry', name: '블루베리 알갱이', color: 0x3F51B5, shape: 'sphere', scale: 0.1, icon: '🫐' },
+            { id: 'whipped_cream', name: '생크림 휩', color: 0xFFFDD0, shape: 'cone', scale: 0.18, icon: '🍦' },
+            { id: 'butter_slice', name: '버터 조각', color: 0xFFE082, shape: 'box', scale: 0.15, icon: '🧈' },
+            { id: 'sugar_powder', name: '슈가 파우더', color: 0xFFFFFF, shape: 'sphere', scale: 0.04, icon: '❄️' },
+            { id: 'matcha_dust', name: '말차 가루', color: 0x558B2F, shape: 'sphere', scale: 0.04, icon: '🍵' },
+            { id: 'gold_flake', name: '식용 금박', color: 0xFFD700, shape: 'box', scale: 0.07, icon: '✨' },
+            { id: 'cherry', name: '체리 토핑', color: 0xD50000, shape: 'sphere', scale: 0.13, icon: '🍒' }
+        ];
+
+        const CUSTOMERS = [
+            { name: '꼬마 손님 민우', avatar: '👦', dialog: '달콤한 토핑이 듬뿍 올라간 빵이 먹고 싶어요!' },
+            { name: '대학생 지은', avatar: '👩', dialog: '인스타에 올릴 예쁜 디저트 빵으로 부탁해요.' },
+            { name: '직장인 수현', avatar: '👨‍💼', dialog: '퇴근길에 먹을 담백하고 따뜻한 빵 있을까요?' },
+            { name: '할머니 손님', avatar: '👵', dialog: '부드럽고 푹신하게 잘 구워진 빵이 최고지.' },
+            { name: '미식가 셰프', avatar: '👨‍🍳', dialog: '완벽한 골든 브라운 빛깔의 베이킹 실력을 보여주게.' },
+            { name: '빵덕후 유튜버', avatar: '🎧', dialog: '오늘의 리뷰용 빵! 완벽한 비주얼로 부탁합니다!' }
+        ];
+
+        // --- GAME STATE ---
+        let state = {
+            gold: 500,
+            level: 1,
+            selectedBread: null,
+            glazeColorOverride: null,
+            creamColor: 0xFFFFFF,
+            toppingsOnBread: [],
+            pipedCreamNodes: [],
+            bakeProgress: 0,
+            isBaking: false,
+            currentOrder: null,
+            patienceTimer: null,
+            currentPatience: 100,
+            activeTab: 'bread',
+            filteredBreads: BREAD_DATABASE
+        };
+
+        // --- THREE.JS GLOBALS ---
+        let scene, camera, renderer, raycaster, mouse;
+        let breadGroup, currentBreadMesh;
+        let ovenLight, mainLight;
+        let isTouching = false;
+        let previousTouchPos = { x: 0, y: 0 };
+
+        window.addEventListener('load', () => {
+            initThreeJS();
+            renderBreadList();
+            renderToppingList();
+            generateNewCustomerOrder();
+            updateHUD();
+            animate();
+        });
+
+        function initThreeJS() {
+            const container = document.getElementById('canvas-container');
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x1a1614);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 3.8, 6.2);
+            camera.lookAt(0, 0.4, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            const ambientLight = new THREE.AmbientLight(0xFFF0E0, 0.85);
+            scene.add(ambientLight);
+
+            mainLight = new THREE.DirectionalLight(0xFFFFFF, 0.95);
+            mainLight.position.set(5, 10, 6);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 1024;
+            mainLight.shadow.mapSize.height = 1024;
+            scene.add(mainLight);
+
+            ovenLight = new THREE.PointLight(0xFF5500, 0, 8);
+            ovenLight.position.set(0, 2.5, 0);
+            scene.add(ovenLight);
+
+            createBakeryEnvironment();
+
+            breadGroup = new THREE.Group();
+            breadGroup.position.set(0, 0.5, 0);
+            scene.add(breadGroup);
+
+            selectBread(BREAD_DATABASE[0]);
+            setupTouchInteraction(renderer.domElement);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function createBakeryEnvironment() {
+            const tableGeo = new THREE.CylinderGeometry(3.6, 3.9, 0.4, 36);
+            const tableMat = new THREE.MeshStandardMaterial({ color: 0x6A422A, roughness: 0.6 });
+            const table = new THREE.Mesh(tableGeo, tableMat);
+            table.position.y = -0.2;
+            table.receiveShadow = true;
+            scene.add(table);
+
+            const trayGeo = new THREE.BoxGeometry(3.2, 0.08, 2.4);
+            const trayMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.3, metalness: 0.8 });
+            const tray = new THREE.Mesh(trayGeo, trayMat);
+            tray.position.y = 0.04;
+            tray.receiveShadow = true;
+            scene.add(tray);
+
+            const paperGeo = new THREE.BoxGeometry(3.0, 0.02, 2.2);
+            const paperMat = new THREE.MeshStandardMaterial({ color: 0xF5E6D3, roughness: 0.9 });
+            const paper = new THREE.Mesh(paperGeo, paperMat);
+            paper.position.y = 0.08;
+            scene.add(paper);
+        }
+
+        function createBreadMesh(breadData) {
+            let geometry;
+            const a = breadData.aspect;
+
+            switch (breadData.baseShape) {
+                case 'box':
+                    geometry = new THREE.BoxGeometry(a[0], a[1], a[2], 12, 12, 12);
+                    break;
+                case 'cylinder':
+                    geometry = new THREE.CylinderGeometry(a[0], a[0], a[2], 24, 12);
+                    break;
+                case 'torus':
+                    geometry = new THREE.TorusGeometry(a[0], a[1], a[2] || 16, a[3] || 32, a[4]);
+                    break;
+                case 'sphere':
+                    geometry = new THREE.SphereGeometry(a[0], 24, 24);
+                    break;
+                case 'muffin':
+                    geometry = new THREE.CylinderGeometry(a[0] * 1.25, a[0] * 0.7, a[1], 16, 8);
+                    break;
+                case 'pretzel':
+                    geometry = new THREE.TorusGeometry(a[0], 0.12, 12, 24);
+                    break;
+                case 'capsule':
+                    geometry = new THREE.CylinderGeometry(a[0], a[0], a[1], 16, 8);
+                    break;
+                case 'macaron':
+                    geometry = new THREE.CylinderGeometry(a[0], a[0], a[1], 24, 8);
+                    break;
+                default:
+                    geometry = new THREE.BoxGeometry(1, 1, 1);
+            }
+
+            const activeColor = state.glazeColorOverride !== null ? state.glazeColorOverride : breadData.baseColor;
+
+            const material = new THREE.MeshStandardMaterial({
+                color: new THREE.Color(activeColor),
+                roughness: 0.7,
+                metalness: 0.05
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            if (breadData.baseShape === 'cylinder' && breadData.category === '바게트') {
+                mesh.rotation.z = Math.PI / 2;
+            } else if (breadData.baseShape === 'torus' || breadData.baseShape === 'pretzel') {
+                mesh.rotation.x = Math.PI / 2;
+            }
+
+            return mesh;
+        }
+
+        // --- DIY DOUGH SHAPE MORPHING & TRANSFORMATIONS ---
+        function updateDoughTransform() {
+            if (!currentBreadMesh) return;
+
+            const sx = parseFloat(document.getElementById('scale-x').value);
+            const sy = parseFloat(document.getElementById('scale-y').value);
+            const sz = parseFloat(document.getElementById('scale-z').value);
+            const twist = parseFloat(document.getElementById('twist-val').value);
+
+            currentBreadMesh.scale.set(sx, sy, sz);
+            currentBreadMesh.rotation.y = twist;
+            playSound('click');
+        }
+
+        function resetDoughShape() {
+            document.getElementById('scale-x').value = 1.0;
+            document.getElementById('scale-y').value = 1.0;
+            document.getElementById('scale-z').value = 1.0;
+            document.getElementById('twist-val').value = 0.0;
+            updateDoughTransform();
+            showToast('형태가 기본값으로 복원되었습니다.');
+        }
+
+        // --- PIPING CREAM / ICING SYSTEM ---
+        function setCreamColor(colorHex) {
+            state.creamColor = colorHex;
+            playSound('click');
+            showToast('짤주머니 크림 색상이 변경되었습니다.');
+        }
+
+        function pipeCreamAtRaycast(e) {
+            if (state.activeTab !== 'icing' || !currentBreadMesh) return;
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+            const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+
+            if (!clientX || !clientY) return;
+
+            mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(currentBreadMesh);
+
+            if (intersects.length > 0) {
+                const hit = intersects[0];
+                const creamGeo = new THREE.SphereGeometry(0.09, 12, 12);
+                const creamMat = new THREE.MeshStandardMaterial({
+                    color: state.creamColor,
+                    roughness: 0.2,
+                    metalness: 0.1
+                });
+                const creamMesh = new THREE.Mesh(creamGeo, creamMat);
+                creamMesh.position.copy(hit.point.clone().add(hit.normal.clone().multiplyScalar(0.04)));
+                creamMesh.castShadow = true;
+
+                breadGroup.add(creamMesh);
+                state.pipedCreamNodes.push(creamMesh);
+                playSound('topping');
+            }
+        }
+
+        function clearPipedCream() {
+            state.pipedCreamNodes.forEach(mesh => breadGroup.remove(mesh));
+            state.pipedCreamNodes = [];
+            showToast('짤주머니 크림이 지워졌습니다.');
+        }
+
+        // --- TOUCH & CONTROLS ---
+        function setupTouchInteraction(element) {
+            const onStart = (x, y, event) => {
+                isTouching = true;
+                previousTouchPos = { x, y };
+
+                if (state.activeTab === 'icing') {
+                    pipeCreamAtRaycast(event);
+                }
+            };
+
+            const onMove = (x, y, event) => {
+                if (!isTouching) return;
+
+                if (state.activeTab === 'icing') {
+                    pipeCreamAtRaycast(event);
+                    return;
+                }
+
+                const deltaX = x - previousTouchPos.x;
+                const deltaY = y - previousTouchPos.y;
+
+                breadGroup.rotation.y += deltaX * 0.01;
+                breadGroup.rotation.x += deltaY * 0.005;
+                breadGroup.rotation.x = Math.max(-0.4, Math.min(0.8, breadGroup.rotation.x));
+
+                previousTouchPos = { x, y };
+            };
+
+            const onEnd = () => { isTouching = false; };
+
+            element.addEventListener('mousedown', e => onStart(e.clientX, e.clientY, e));
+            window.addEventListener('mousemove', e => onMove(e.clientX, e.clientY, e));
+            window.addEventListener('mouseup', onEnd);
+
+            element.addEventListener('touchstart', e => {
+                if (e.touches.length === 1) onStart(e.touches[0].clientX, e.touches[0].clientY, e);
+            }, { passive: true });
+
+            window.addEventListener('touchmove', e => {
+                if (e.touches.length === 1) onMove(e.touches[0].clientX, e.touches[0].clientY, e);
+            }, { passive: true });
+
+            window.addEventListener('touchend', onEnd);
+        }
+
+        // --- OVEN BAKE LOGIC ---
+        function toggleBaking() {
+            state.isBaking = !state.isBaking;
+            const btnText = document.getElementById('bake-btn-text');
+            const toggleBtn = document.getElementById('btn-bake-toggle');
+
+            if (state.isBaking) {
+                btnText.innerText = '오븐 가열 정지';
+                toggleBtn.classList.remove('from-amber-600', 'to-orange-600');
+                toggleBtn.classList.add('from-red-600', 'to-rose-700');
+                playSound('click');
+                showToast('🔥 오븐 가열 중! 원하는 색상일 때 정지하세요!');
+            } else {
+                btnText.innerText = '오븐 다시 가동';
+                toggleBtn.classList.remove('from-red-600', 'to-rose-700');
+                toggleBtn.classList.add('from-amber-600', 'to-orange-600');
+                playSound('click');
+                showToast('⏸️ 가열을 정지했습니다.');
+            }
+        }
+
+        function resetDough() {
+            state.bakeProgress = 0;
+            state.isBaking = false;
+            document.getElementById('bake-btn-text').innerText = '오븐 가열 시작';
+            const toggleBtn = document.getElementById('btn-bake-toggle');
+            toggleBtn.classList.remove('from-red-600', 'to-rose-700');
+            toggleBtn.classList.add('from-amber-600', 'to-orange-600');
+
+            selectBread(state.selectedBread);
+            showToast('🔄 생반죽 상태로 초기화되었습니다.');
+        }
+
+        function updateBakingEffect() {
+            if (!state.selectedBread || !currentBreadMesh) return;
+
+            if (state.isBaking) {
+                state.bakeProgress += 0.0018;
+                ovenLight.intensity = 4.0 + Math.sin(Date.now() * 0.01) * 2.0;
+            } else {
+                ovenLight.intensity = THREE.MathUtils.lerp(ovenLight.intensity, 0, 0.1);
+            }
+
+            const activeBaseColor = state.glazeColorOverride !== null ? state.glazeColorOverride : state.selectedBread.baseColor;
+            const rawColor = new THREE.Color(activeBaseColor);
+            const goldenColor = new THREE.Color(0x9E5B23);
+            const burntColor = new THREE.Color(0x180E09);
+
+            let targetColor = new THREE.Color();
+            let statusStr = "생반죽 (날것)";
+
+            if (state.bakeProgress <= 0.5) {
+                const factor = state.bakeProgress / 0.5;
+                targetColor.lerpColors(rawColor, goldenColor, factor);
+                statusStr = `구우는 중... (${Math.round(state.bakeProgress * 100)}%)`;
+            } else if (state.bakeProgress <= 1.0) {
+                const factor = (state.bakeProgress - 0.5) / 0.5;
+                targetColor.lerpColors(goldenColor, burntColor, factor);
+                if (state.bakeProgress < 0.75) {
+                    statusStr = `✨ 노릇노릇 완벽함! (${Math.round(state.bakeProgress * 100)}%)`;
+                } else {
+                    statusStr = `⚠️ 타는 중! 서두르세요! (${Math.round(state.bakeProgress * 100)}%)`;
+                }
+            } else {
+                targetColor.copy(burntColor);
+                statusStr = "💀 완전히 탄 빵이 되었습니다!";
+            }
+
+            currentBreadMesh.material.color.copy(targetColor);
+
+            const bar = document.getElementById('bake-progress-bar');
+            const percent = Math.min(100, Math.round((state.bakeProgress / 1.0) * 100));
+            bar.style.width = `${percent}%`;
+            document.getElementById('bake-status-text').innerText = statusStr;
+        }
+
+        // --- BREAD & CUSTOMIZATION LOGIC ---
+        function selectBread(breadData) {
+            state.selectedBread = breadData;
+            clearToppings();
+            clearPipedCream();
+
+            while (breadGroup.children.length > 0) {
+                breadGroup.remove(breadGroup.children[0]);
+            }
+
+            currentBreadMesh = createBreadMesh(breadData);
+            breadGroup.add(currentBreadMesh);
+
+            resetDoughShape();
+            playSound('click');
+
+            document.querySelectorAll('.bread-item-btn').forEach(btn => {
+                btn.classList.remove('border-amber-600', 'bg-amber-100/90', 'scale-105');
+            });
+            const activeBtn = document.getElementById(`bread-btn-${breadData.id}`);
+            if (activeBtn) {
+                activeBtn.classList.add('border-amber-600', 'bg-amber-100/90', 'scale-105');
+                activeBtn.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            }
+        }
+
+        function setGlazeColor(hexColor) {
+            state.glazeColorOverride = hexColor;
+            if (state.selectedBread) {
+                selectBread(state.selectedBread);
+                showToast(hexColor === null ? '기본 반죽 색상 적용' : '글레이즈 코팅 적용 완료!');
+            }
+        }
+
+        function addTopping(toppingData) {
+            if (!currentBreadMesh) return;
+
+            const count = 4;
+            for (let i = 0; i < count; i++) {
+                let geom;
+                if (toppingData.shape === 'sphere') geom = new THREE.SphereGeometry(toppingData.scale, 12, 12);
+                else if (toppingData.shape === 'cone') geom = new THREE.ConeGeometry(toppingData.scale, toppingData.scale * 1.5, 12);
+                else if (toppingData.shape === 'dodeca') geom = new THREE.DodecahedronGeometry(toppingData.scale);
+                else geom = new THREE.BoxGeometry(toppingData.scale, toppingData.scale, toppingData.scale);
+
+                const mat = new THREE.MeshStandardMaterial({
+                    color: toppingData.color,
+                    roughness: 0.35
+                });
+
+                const toppingMesh = new THREE.Mesh(geom, mat);
+                const radius = 0.55;
+                toppingMesh.position.set(
+                    (Math.random() - 0.5) * radius * 1.2,
+                    0.38 + Math.random() * 0.25,
+                    (Math.random() - 0.5) * radius * 1.2
+                );
+                toppingMesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, 0);
+                toppingMesh.castShadow = true;
+
+                breadGroup.add(toppingMesh);
+                state.toppingsOnBread.push({ id: toppingData.id, mesh: toppingMesh });
+            }
+
+            playSound('topping');
+            showToast(`${toppingData.name} 추가 완료!`);
+        }
+
+        function clearToppings() {
+            state.toppingsOnBread.forEach(item => breadGroup.remove(item.mesh));
+            state.toppingsOnBread = [];
+        }
+
+        // --- ORDER & PATIENCE SYSTEM ---
+        function generateNewCustomerOrder() {
+            if (state.patienceTimer) clearInterval(state.patienceTimer);
+
+            const customer = CUSTOMERS[Math.floor(Math.random() * CUSTOMERS.length)];
+            const targetBread = BREAD_DATABASE[Math.floor(Math.random() * BREAD_DATABASE.length)];
+            const targetTopping = TOPPINGS_DATABASE[Math.floor(Math.random() * TOPPINGS_DATABASE.length)];
+
+            state.currentOrder = {
+                customer,
+                targetBread,
+                targetTopping,
+                reward: 200 + Math.floor(Math.random() * 250) + (state.level * 40)
+            };
+
+            state.currentPatience = 100;
+
+            document.getElementById('customer-avatar').innerText = customer.avatar;
+            document.getElementById('customer-name').innerText = customer.name;
+            document.getElementById('customer-dialog').innerText = `"${customer.dialog}"`;
+            document.getElementById('target-bread-name').innerText = targetBread.name;
+            document.getElementById('target-topping-name').innerText = targetTopping.name;
+            document.getElementById('target-reward').innerText = `${state.currentOrder.reward} G`;
+
+            updatePatienceUI();
+
+            // Customer Patience Countdown Timer
+            state.patienceTimer = setInterval(() => {
+                state.currentPatience -= 2;
+                updatePatienceUI();
+
+                if (state.currentPatience <= 0) {
+                    clearInterval(state.patienceTimer);
+                    playSound('fail');
+                    showToast(`😡 ${customer.name} 손님이 기다리다 지쳐 그냥 떠났습니다...`);
+                    generateNewCustomerOrder();
+                }
+            }, 1000);
+        }
+
+        function updatePatienceUI() {
+            const bar = document.getElementById('patience-bar');
+            const badge = document.getElementById('patience-badge');
+
+            bar.style.width = `${state.currentPatience}%`;
+            badge.innerText = `인내심 ${state.currentPatience}%`;
+
+            if (state.currentPatience > 60) {
+                bar.className = 'bg-emerald-500 h-full transition-all duration-300';
+                badge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800';
+            } else if (state.currentPatience > 30) {
+                bar.className = 'bg-amber-500 h-full transition-all duration-300';
+                badge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800';
+            } else {
+                bar.className = 'bg-red-500 h-full transition-all duration-300';
+                badge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-red-100 text-red-800';
+            }
+        }
+
+        function skipCustomer() {
+            playSound('click');
+            showToast('손님을 넘겼습니다. 새로운 손님이 찾아옵니다.');
+            generateNewCustomerOrder();
+        }
+
+        function deliverOrder() {
+            if (!state.selectedBread || !state.currentOrder) return;
+
+            const order = state.currentOrder;
+            let score = 0;
+
+            if (state.selectedBread.id === order.targetBread.id) {
+                score += 40;
+            } else if (state.selectedBread.category === order.targetBread.category) {
+                score += 20;
+            }
+
+            const hasTargetTopping = state.toppingsOnBread.some(t => t.id === order.targetTopping.id);
+            if (hasTargetTopping) score += 30;
+
+            if (state.bakeProgress >= 0.45 && state.bakeProgress <= 0.7) {
+                score += 30;
+            } else if (state.bakeProgress > 0.1 && state.bakeProgress < 0.9) {
+                score += 15;
+            }
+
+            // Patience bonus
+            score += Math.round((state.currentPatience / 100) * 10);
+
+            if (score >= 60) {
+                const earned = Math.round(order.reward * (score / 100));
+                state.gold += earned;
+                
+                playSound('success');
+                spawnFloatingScore(`+${earned} G (${score}점)`, '#10B981');
+                showToast(`🎉 손님이 대만족했습니다! (+${earned} G)`);
+                
+                if (state.gold >= state.level * 1000) {
+                    state.level += 1;
+                    showToast(`⭐ 승급! 레벨 ${state.level} 파티시에가 되었습니다!`);
+                }
+
+                generateNewCustomerOrder();
+                updateHUD();
+            } else {
+                playSound('fail');
+                spawnFloatingScore(`실패 (${score}점)`, '#EF4444');
+                showToast(`😅 손님이 아쉬워합니다 (점수: ${score}점). 요청을 맞춰서 다시 제작해 보세요!`);
+            }
+        }
+
+        function spawnFloatingScore(text, colorHex) {
+            const el = document.createElement('div');
+            el.className = 'floating-score text-xl';
+            el.style.color = colorHex;
+            el.style.left = '50%';
+            el.style.top = '40%';
+            el.innerText = text;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1200);
+        }
+
+        function updateHUD() {
+            document.getElementById('gold-display').innerText = `${state.gold.toLocaleString()} G`;
+            
+            let titleStr = `Lv.${state.level} 초보 제빵사`;
+            if (state.level >= 5) titleStr = `Lv.${state.level} 전설의 베이커리 마스터 👑`;
+            else if (state.level >= 3) titleStr = `Lv.${state.level} 수석 파티시에 🧁`;
+            else if (state.level >= 2) titleStr = `Lv.${state.level} 숙련 제빵사 🥖`;
+
+            document.getElementById('level-display').innerText = titleStr;
+        }
+
+        function filterBreadList() {
+            const query = document.getElementById('bread-search-input').value.trim().toLowerCase();
+            const category = document.getElementById('bread-cat-select').value;
+
+            state.filteredBreads = BREAD_DATABASE.filter(bread => {
+                const matchName = bread.name.toLowerCase().includes(query);
+                const matchCat = category === 'ALL' || bread.category === category;
+                return matchName && matchCat;
+            });
+
+            renderBreadList();
+        }
+
+        function renderBreadList() {
+            const listEl = document.getElementById('bread-list');
+            listEl.innerHTML = '';
+
+            document.getElementById('total-bread-count').innerText = state.filteredBreads.length;
+
+            if (state.filteredBreads.length === 0) {
+                listEl.innerHTML = `<div class="text-xs text-amber-800 font-bold p-3">검색 결과에 맞는 빵이 없습니다.</div>`;
+                return;
+            }
+
+            state.filteredBreads.forEach(bread => {
+                const btn = document.createElement('button');
+                btn.id = `bread-btn-${bread.id}`;
+                btn.className = `bread-item-btn flex-shrink-0 w-20 h-20 bg-white/90 border-2 border-amber-200/80 rounded-2xl flex flex-col items-center justify-center p-1 shadow-sm hover:shadow-md transition transform active:scale-95`;
+                btn.onclick = () => selectBread(bread);
+
+                btn.innerHTML = `
+                    <span class="text-2xl mb-0.5">${bread.icon}</span>
+                    <span class="text-[9px] font-black text-amber-950 leading-tight truncate w-full text-center px-0.5">${bread.name}</span>
+                `;
+                listEl.appendChild(btn);
+            });
+        }
+
+        function renderToppingList() {
+            const listEl = document.getElementById('topping-list');
+            listEl.innerHTML = '';
+
+            TOPPINGS_DATABASE.forEach(topping => {
+                const btn = document.createElement('button');
+                btn.className = `flex-shrink-0 w-20 h-20 bg-white/90 border-2 border-amber-200/80 rounded-2xl flex flex-col items-center justify-center p-1 shadow-sm hover:shadow-md transition active:scale-95`;
+                btn.onclick = () => addTopping(topping);
+
+                btn.innerHTML = `
+                    <span class="text-2xl mb-0.5">${topping.icon}</span>
+                    <span class="text-[10px] font-bold text-amber-950 truncate w-full text-center">${topping.name}</span>
+                `;
+                listEl.appendChild(btn);
+            });
+        }
+
+        function switchTab(tabName) {
+            state.activeTab = tabName;
+            playSound('click');
+
+            ['bread', 'diy', 'icing', 'topping', 'oven'].forEach(t => {
+                const panel = document.getElementById(`panel-${t}`);
+                const tabBtn = document.getElementById(`tab-${t}`);
+                if (t === tabName) {
+                    panel.classList.remove('hidden');
+                    tabBtn.classList.add('bg-amber-500', 'text-white', 'shadow-md');
+                    tabBtn.classList.remove('bg-amber-100/80', 'text-amber-900');
+                } else {
+                    panel.classList.add('hidden');
+                    tabBtn.classList.remove('bg-amber-500', 'text-white', 'shadow-md');
+                    tabBtn.classList.add('bg-amber-100/80', 'text-amber-900');
+                }
+            });
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.remove('opacity-0');
+            toast.classList.add('opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('opacity-100');
+                toast.classList.add('opacity-0');
+            }, 2500);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            if (!isTouching && breadGroup) {
+                breadGroup.rotation.y += 0.003;
+            }
+
+            updateBakingEffect();
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
